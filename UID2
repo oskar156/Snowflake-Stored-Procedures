@@ -1,0 +1,37 @@
+/*
+UID2 (TABLE_NAME string)
+RETURNS STRING (output message for user)
+adds UNIQUE_ID BIGINT column and replaces TABLE_NAME
+
+--DOES NOT ENFORCE UNIQUE
+--IS CONSECUTIVE
+--DOES NOT ADD NEW UNIQUE VALUE IF DATA INSERTED
+--FASTER THAN UID
+*/
+                
+CREATE OR REPLACE PROCEDURE UID2 (
+    TABLE_NAME string
+)
+RETURNS string
+LANGUAGE SQL 
+AS
+$$
+DECLARE
+    QUERY STRING;
+    COLUMN_NAMES STRING;
+BEGIN
+
+    --create empty temp table LIKE TABLE_NAME
+    QUERY := ' 
+        CREATE OR REPLACE TABLE IDENTIFIER(''"'||:TABLE_NAME||'"'') AS 
+        SELECT *, ROW_NUMBER() OVER(ORDER BY 1) AS UNIQUE_ID
+        FROM IDENTIFIER(''"'||:TABLE_NAME||'"'');
+    ';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --output message for user
+    RETURN 'Column UNIQUE_ID BIGINT added to table "'||TABLE_NAME||'"';
+END;
+$$;
+
+                
