@@ -1,0 +1,88 @@
+/*
+UID (TABLE_NAME string)
+RETURNS STRING (output message for user)
+adds UNIQUE_ID BIGINT IDENTITY column to temp_table, inserts data from TABLE_NAME to temp_table, drops TABLE_NAME, renames temp_table to TABLE_NAME
+
+https://docs.snowflake.com/en/sql-reference/constraints-overview#supported-constraint-types (UNIQUE CONSTRAINT IS NOT ENFORCED)
+https://docs.snowflake.com/en/user-guide/querying-sequences (CONSECUTIVE NUMBERS NOT GUARENTEED)
+
+--DOES NOT ENFORCE UNIQUE
+--NOT GUARENTEED TO BE SEQUENTIAL
+--ADDS NEW UNIQUE VALUE IF DATA INSERTED
+*/
+                
+CREATE OR REPLACE PROCEDURE UID (
+    TABLE_NAME string
+)
+RETURNS string
+LANGUAGE SQL 
+AS
+$$
+DECLARE
+    QUERY STRING;
+    COLUMN_NAMES STRING;
+    TEMP_TABLE_NAME STRING;
+    TIMESTAMP_STR STRING;
+BEGIN
+
+    TIMESTAMP_STR := RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(CURRENT_TIMESTAMP(), ' ', '_'),'-','_'),':','_'),'.','_'), 23);
+    TEMP_TABLE_NAME := '__UIDTEMP__'||:TIMESTAMP_STR||'__UIDTEMP__';
+
+    --create empty temp table LIKE TABLE_NAME
+    QUERY := ' 
+        CREATE OR REPLACE TABLE IDENTIFIER(''"'||TEMP_TABLE_NAME||'"'')
+        LIKE IDENTIFIER(''"'||:TABLE_NAME||'"'');
+    ';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --add UNIQUE_ID column to empty temp table
+    QUERY := 'ALTER TABLE IDENTIFIER(''"'||TEMP_TABLE_NAME||'"'') ADD UNIQUE_ID INT IDENTITY;';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --concatenate column names from TABLE_NAME into a single string
+    --so we can write the INSERT INTO query below
+    QUERY := ' 
+        SELECT ''"''||LISTAGG(column_name, ''","'')||''"''
+        FROM information_schema.columns
+        WHERE table_schema = CURRENT_SCHEMA()
+        AND table_name = '''||:TABLE_NAME||'''
+        ORDER BY column_name;
+    ';
+    LET RES RESULTSET := (EXECUTE IMMEDIATE :QUERY);
+    
+    
+    --set the result into a string variable we can use it in the query below
+    LET CUR CURSOR FOR RES;
+    OPEN CUR;
+    FETCH CUR INTO COLUMN_NAMES;
+    CLOSE CUR;
+
+    --insert data from TABLE_NAME into temp table
+    QUERY := ' 
+        INSERT INTO IDENTIFIER(''"'||TEMP_TABLE_NAME||'"'') ('||:COLUMN_NAMES||')
+        SELECT '||:COLUMN_NAMES||'
+        FROM IDENTIFIER(''"'||:TABLE_NAME||'"'');
+    ';
+    EXECUTE IMMEDIATE :QUERY;
+
+
+    --drop og table
+    QUERY := 'DROP TABLE IDENTIFIER(''"'||TABLE_NAME||'"'');';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --rename temp table to TABLE_NAME
+    QUERY := ' 
+        ALTER TABLE IDENTIFIER(''"'||TEMP_TABLE_NAME||'"'')
+        RENAME TO IDENTIFIER(''"'||:TABLE_NAME||'"'');
+    ';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --output message for user
+    RETURN 'Column UNIQUE_ID added to table "'||TABLE_NAME||'"';
+END;
+$$;
+
+/* EXAMPLE USAGE
+CALL UID('OKTEST');
+CALL UID('OK TEST');
+*/
