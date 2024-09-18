@@ -1,0 +1,31 @@
+/*
+GRP (TABLE_NAME string, COLS string, DB_NAME string DEFAULT CURRENT_DATABASE())
+RETURNS TABLE() (grouped table)
+*/
+                
+CREATE OR REPLACE PROCEDURE GRP (
+    TABLE_NAME string
+    ,COLS string
+    ,DB_NAME string DEFAULT CURRENT_DATABASE()
+)
+RETURNS TABLE()
+LANGUAGE SQL 
+AS
+$$
+DECLARE
+    QUERY STRING;
+    RES RESULTSET;
+BEGIN
+    QUERY := ' 
+        SELECT '||COLS||', COUNT(*)
+        FROM "'||DB_NAME||'".."'||TABLE_NAME||'"
+        GROUP BY '||COLS||'
+        ORDER BY '||COLS||'
+    ';
+    RES := (EXECUTE IMMEDIATE :QUERY);
+
+    --return the grouped table
+    RETURN TABLE(RES);
+END;
+$$;
+                
