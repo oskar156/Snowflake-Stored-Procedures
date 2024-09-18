@@ -1,0 +1,30 @@
+/*
+ROWID (TABLE_NAME string, COLS string, SUFFIX string DEFAULT '')
+RETURNS STRING (output message for user)
+adds ROWID+SUFFIX column and replaces TABLE_NAME
+*/
+                
+CREATE OR REPLACE PROCEDURE ROWID (
+    TABLE_NAME string
+    ,COLS string
+    ,SUFFIX string DEFAULT ''
+)
+RETURNS string
+LANGUAGE SQL 
+AS
+$$
+DECLARE
+    QUERY STRING;
+BEGIN
+    QUERY := ' 
+        CREATE OR REPLACE TABLE IDENTIFIER(''"'||:TABLE_NAME||'"'') AS
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY '||COLS||' ORDER BY '||COLS||') as "ROWID'||SUFFIX||'"
+        FROM IDENTIFIER(''"'||:TABLE_NAME||'"'')
+    ';
+    EXECUTE IMMEDIATE :QUERY;
+
+    --output message for user
+    RETURN 'Column "ROWID'||SUFFIX||'" (partioned by '||COLS||' added to table "'||TABLE_NAME||'"';
+END;
+$$;
+                
