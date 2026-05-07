@@ -18,10 +18,12 @@ BEGIN
         WHERE TABLE_CATALOG            = UPPER('''||:DB_STR||''')
           AND TABLE_SCHEMA             = UPPER('''||:SCHEMA_STR||''')
           AND TABLE_NAME               = UPPER('''||:TABLE_NAME_STR||''')
-          AND CHARACTER_MAXIMUM_LENGTH IS NOT NULL
-          AND CHARACTER_MAXIMUM_LENGTH < 16777216
         ORDER BY ORDINAL_POSITION';
-  
+
+        --THESE EXCLUDE NON-TEXT COLUMNS
+        --   AND CHARACTER_MAXIMUM_LENGTH IS NOT NULL
+        --   AND CHARACTER_MAXIMUM_LENGTH < 16777216
+
     LET COLUMN_INFO RESULTSET := (EXECUTE IMMEDIATE :QUERY);
 
     FOR REC IN COLUMN_INFO
@@ -36,14 +38,25 @@ BEGIN
         OPEN CUR1;
         FETCH CUR1 INTO CURRENT_COL_MAX_LEN;
         CLOSE CUR1;
-       
-        FINAL_QUERY := FINAL_QUERY || ' CAST('|| curr_col || ' AS VARCHAR('|| CURRENT_COL_MAX_LEN || ')) AS '|| curr_col || ',';
+        
+        
+
+        --IF IT'S TEXT
+        IF (REC.CHARACTER_MAXIMUM_LENGTH IS NOT NULL) THEN  -- AND REC.CHARACTER_MAXIMUM_LENGTH < 16777216
+            -- right-size it
+            CURRENT_COL_MAX_LEN := GREATEST(COALESCE(CURRENT_COL_MAX_LEN, 1), 1); --PROTECT AGAINST NULLS (GREATEST() IS REDUNDANT I THINK)
+            FINAL_QUERY := FINAL_QUERY || 'CAST('|| curr_col ||' AS VARCHAR('|| CURRENT_COL_MAX_LEN ||')) AS '|| curr_col || ',';
+        --IF IT'S NOT TEXT
+        ELSE
+            -- pass through untouched, preserving original type
+            FINAL_QUERY := FINAL_QUERY || curr_col || ',';
+        END IF;
     END FOR;
 
     FINAL_QUERY := LEFT(FINAL_QUERY, LENGTH(FINAL_QUERY) - 1); --REMOVE LAST COMMA
     FINAL_QUERY := FINAL_QUERY || ' FROM '||TABLE_NAME_STR || ';';
     EXECUTE IMMEDIATE :FINAL_QUERY;
   
-    RETURN 'Table ' || :TABLE_NAME_STR || ' has been right-sized.';
+    RETURN 'Table ' || :TABLE_NAME_STR || ' has been right-sized.  '||:FINAL_QUERY;
 END;
 $$;
